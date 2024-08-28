@@ -1,4 +1,14 @@
-import { IconButton, MenuItem, Stack, SvgIcon, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import {
+  IconButton,
+  MenuItem,
+  Stack,
+  SvgIcon,
+  SxProps,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+  TypographyProps,
+} from "@mui/material";
 import { Formik, FormikProps, FormikValues, useFormikContext } from "formik";
 import { z } from "zod";
 import { toFormikValidationSchema } from "zod-formik-adapter";
@@ -10,15 +20,28 @@ const formSchema = z.object({
   declarer: z.nativeEnum(Side),
   contract: z.string().refine((v) => !!Contract.parse(v), { message: "Invalid contract" }),
   tricks: z.number(),
-  honors: z.nativeEnum(Honors).optional(),
+  honors: z.record(z.nativeEnum(Side), z.nativeEnum(Honors)),
 });
 
 type Form = z.infer<typeof formSchema>;
+
+const buttonSchema: SxProps = {
+  width: 28,
+  height: 28,
+};
 
 function getDeal(values: FormikProps<Form>["values"]): Deal | undefined {
   const contract = Contract.parse(values.contract);
   if (!contract) return undefined;
   return new Deal(values.declarer, contract, values.tricks, values.honors);
+}
+
+function Caption({ children, ...rest }: TypographyProps) {
+  return (
+    <Typography variant="caption" color="text.secondary" {...rest}>
+      {children}
+    </Typography>
+  );
 }
 
 function TrickSelector({ from, to }: { from: number; to: number }) {
@@ -30,7 +53,7 @@ function TrickSelector({ from, to }: { from: number; to: number }) {
       onChange={(_, v) => v !== undefined && formik.setFieldValue("tricks", v)}
     >
       {Array.from({ length: to - from + 1 }, (_, index) => index + from).map((v) => (
-        <ToggleButton value={v} key={v} sx={{ width: 28, height: 28 }}>
+        <ToggleButton value={v} key={v} sx={buttonSchema}>
           <Typography variant="caption">{v}</Typography>
         </ToggleButton>
       ))}
@@ -38,8 +61,31 @@ function TrickSelector({ from, to }: { from: number; to: number }) {
   );
 }
 
+function HonorsSelector({ side }: { side: Side }) {
+  const formik = useFormikContext<Form>();
+  return (
+    <Stack>
+      <ToggleButtonGroup
+        exclusive
+        value={formik.values.honors[side]}
+        orientation="vertical"
+        onChange={(_, v) => formik.setFieldValue(`honors.${side}`, v ?? undefined)}
+      >
+        <ToggleButton value={Honors.Partial} sx={buttonSchema}>
+          <Typography variant="caption">H</Typography>
+        </ToggleButton>
+        <ToggleButton value={Honors.Full} sx={buttonSchema}>
+          <Typography variant="caption">FH</Typography>
+        </ToggleButton>
+      </ToggleButtonGroup>
+      <Caption textAlign="center">{side}</Caption>
+    </Stack>
+  );
+}
+
 function DealInputForm(props: DealInputProps) {
   const formik = useFormikContext<Form>();
+  console.log(formik.values);
   return (
     <Stack direction="row" alignItems="start" spacing={1}>
       <FormikTextField select name="declarer" label="Declarer" helperText={undefined} sx={{ width: 120 }}>
@@ -58,22 +104,16 @@ function DealInputForm(props: DealInputProps) {
           if (Contract.MASK.test(evt.target.value)) formik.setFieldValue("contract", evt.target.value);
         }}
       />
+
       <Stack>
         <TrickSelector from={0} to={6} />
         <TrickSelector from={7} to={13} />
+        <Caption>Tricks Won</Caption>
       </Stack>
-      <ToggleButtonGroup
-        exclusive
-        value={formik.values.honors}
-        orientation="vertical"
-        onChange={(_, v) => formik.setFieldValue("honors", v)}
-      >
-        {Object.values(Honors).map((honor) => (
-          <ToggleButton key={honor} value={honor} sx={{ width: 28, height: 28 }}>
-            <Typography variant="caption">{honor}</Typography>
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
+
+      <HonorsSelector side={Side.NorthSouth} />
+      <HonorsSelector side={Side.EastWest} />
+
       <IconButton aria-label="add" disabled={!formik.isValid} onClick={formik.submitForm}>
         <SvgIcon>
           <PlusIcon />
@@ -94,7 +134,7 @@ export default function DealInput(props: DealInputProps) {
         declarer: Side.NorthSouth,
         contract: "",
         tricks: undefined as any,
-        honors: undefined as any,
+        honors: {},
       }}
       validationSchema={toFormikValidationSchema(formSchema)}
       onSubmit={(values, { resetForm }) => {

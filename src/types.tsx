@@ -115,19 +115,16 @@ export class Deal {
   contract: Contract;
   /** The raw number of tricks achieved (0-13) */
   tricks: number;
-  /** The hand honors */
-  honors?: Honors;
+  /** The hand honors, if any, per side */
+  honors: Partial<Record<Side, Honors>>;
 
-  constructor(declarer: Side, contract: Contract, tricks: number, honors?: Honors) {
+  constructor(declarer: Side, contract: Contract, tricks: number, honors: Partial<Record<Side, Honors>>) {
     console.assert(Number.isInteger(tricks), `The number of tricks must be an integer. Got ${tricks}`);
     console.assert(0 <= tricks && tricks <= 13, `The number of tricks must be 0-13. Got ${tricks}`);
-    console.assert(
-      contract.trump === Trump.NoTrump && honors === Honors.Partial,
-      `Partial honors are not allowed for NT contracts`
-    );
 
     this.declarer = declarer;
     this.contract = contract;
     this.tricks = tricks;
+    this.honors = honors;
   }
 }
