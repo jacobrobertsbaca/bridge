@@ -1,0 +1,40 @@
+{
+  "name": "material-ui-cra-ts",
+  "version": "5.0.0",
+  "private": true,
+  "homepage": "https://jacobrobertsbaca.github.io/bridge",
+  "dependencies": {
+    "@emotion/react": "latest",
+    "@emotion/styled": "latest",
+    "@mui/material": "next",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-scripts": "latest",
+    "typescript": "latest"
+  },
+  "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "gh-pages": "^6.1.1"
+  }
+}
