@@ -1,0 +1,10 @@
+{
+  "files": {
+    "main.js": "/bridge/static/js/main.770bbad3.js",
+    "index.html": "/bridge/index.html",
+    "main.770bbad3.js.map": "/bridge/static/js/main.770bbad3.js.map"
+  },
+  "entrypoints": [
+    "static/js/main.770bbad3.js"
+  ]
+}
