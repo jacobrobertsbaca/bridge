@@ -9,7 +9,7 @@ import {
   Typography,
   TypographyProps,
 } from "@mui/material";
-import { Formik, FormikProps, FormikValues, useFormikContext } from "formik";
+import { Formik, FormikProps, useFormikContext } from "formik";
 import { z } from "zod";
 import { toFormikValidationSchema } from "zod-formik-adapter";
 import { Contract, Deal, Honors, Side } from "./types";
@@ -44,13 +44,14 @@ function Caption({ children, ...rest }: TypographyProps) {
   );
 }
 
-function TrickSelector({ from, to }: { from: number; to: number }) {
+function TrickSelector({ from, to, disabled }: { from: number; to: number, disabled?: boolean }) {
   const formik = useFormikContext<Form>();
   return (
     <ToggleButtonGroup
       exclusive
       value={formik.values.tricks}
       onChange={(_, v) => v !== undefined && formik.setFieldValue("tricks", v)}
+      disabled={disabled}
     >
       {Array.from({ length: to - from + 1 }, (_, index) => index + from).map((v) => (
         <ToggleButton value={v} key={v} sx={buttonSchema}>
@@ -61,7 +62,7 @@ function TrickSelector({ from, to }: { from: number; to: number }) {
   );
 }
 
-function HonorsSelector({ side }: { side: Side }) {
+function HonorsSelector({ side, disabled }: { side: Side, disabled?: boolean }) {
   const formik = useFormikContext<Form>();
   return (
     <Stack>
@@ -70,6 +71,7 @@ function HonorsSelector({ side }: { side: Side }) {
         value={formik.values.honors[side]}
         orientation="vertical"
         onChange={(_, v) => formik.setFieldValue(`honors.${side}`, v ?? undefined)}
+        disabled={disabled}
       >
         <ToggleButton value={Honors.Partial} sx={buttonSchema}>
           <Typography variant="caption">H</Typography>
@@ -83,12 +85,12 @@ function HonorsSelector({ side }: { side: Side }) {
   );
 }
 
-function DealInputForm(props: DealInputProps) {
+function DealInputForm({ disabled }: DealInputProps) {
   const formik = useFormikContext<Form>();
-  console.log(formik.values);
+  console.log(formik.errors)
   return (
     <Stack direction="row" alignItems="start" spacing={1}>
-      <FormikTextField select name="declarer" label="Declarer" helperText={undefined} sx={{ width: 120 }}>
+      <FormikTextField select name="declarer" label="Declarer" helperText={undefined} sx={{ width: 120 }} disabled={disabled}>
         {Object.values(Side).map((side) => (
           <MenuItem key={side} value={side}>
             {side}
@@ -103,18 +105,19 @@ function DealInputForm(props: DealInputProps) {
         onChange={(evt) => {
           if (Contract.MASK.test(evt.target.value)) formik.setFieldValue("contract", evt.target.value);
         }}
+        disabled={disabled}
       />
 
       <Stack>
-        <TrickSelector from={0} to={6} />
-        <TrickSelector from={7} to={13} />
+        <TrickSelector from={0} to={6} disabled={disabled} />
+        <TrickSelector from={7} to={13} disabled={disabled} />
         <Caption>Tricks Won</Caption>
       </Stack>
 
-      <HonorsSelector side={Side.NorthSouth} />
-      <HonorsSelector side={Side.EastWest} />
+      <HonorsSelector side={Side.NorthSouth} disabled={disabled} />
+      <HonorsSelector side={Side.EastWest} disabled={disabled} />
 
-      <IconButton aria-label="add" disabled={!formik.isValid} onClick={formik.submitForm}>
+      <IconButton aria-label="add" disabled={disabled || !formik.isValid} onClick={formik.submitForm}>
         <SvgIcon>
           <PlusIcon />
         </SvgIcon>
@@ -124,6 +127,7 @@ function DealInputForm(props: DealInputProps) {
 }
 
 export type DealInputProps = {
+  disabled?: boolean;
   onDeal: (deal: Deal) => void;
 };
 
