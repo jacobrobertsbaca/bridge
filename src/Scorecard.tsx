@@ -176,7 +176,8 @@ function BonusPoints({ play }: ScorecardProps) {
 
   return (
     <>
-      {rows.length > 0 ? (
+      <BodySpace sx={rows.length === 0 ? bottomStyle : {}} />
+      {rows.length > 0 && (
         <TableBody sx={bottomStyle}>
           {rows.reverse().map((idx) => (
             <TableRow key={idx}>
@@ -185,8 +186,6 @@ function BonusPoints({ play }: ScorecardProps) {
             </TableRow>
           ))}
         </TableBody>
-      ) : (
-        <BodySpace sx={bottomStyle} />
       )}
     </>
   );
