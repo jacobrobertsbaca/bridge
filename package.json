@@ -1,7 +1,6 @@
 {
-  "name": "material-ui-cra-ts",
-  "version": "5.0.0",
-  "private": true,
+  "name": "bridge-scoresheet",
+  "version": "1.0.0",
   "homepage": "https://jacobrobertsbaca.github.io/bridge",
   "dependencies": {
     "@emotion/react": "latest",
