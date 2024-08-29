@@ -83,7 +83,7 @@ function HonorsSelector({ side, disabled }: { side: Side; disabled?: boolean }) 
         }}
         disabled={disabled}
       >
-        <Tooltip title={"Hold 4/5 of A/K/Q/J/10 of trumps."} placement="top" arrow>
+        <Tooltip title={"Hold 4/5 of AKQJT of trumps."} placement="top" arrow>
           <ToggleButton
             value={Honors.Partial}
             sx={buttonSchema}
@@ -92,7 +92,7 @@ function HonorsSelector({ side, disabled }: { side: Side; disabled?: boolean }) 
             <Typography variant="caption">H</Typography>
           </ToggleButton>
         </Tooltip>
-        <Tooltip title={"Hold all A/K/Q/J/10 of trumps, or all four aces if NT."} placement="bottom" arrow>
+        <Tooltip title={"Hold all AKQJT of trumps, or all four aces if NT."} placement="bottom" arrow>
           <ToggleButton value={Honors.Full} sx={buttonSchema}>
             <Typography variant="caption">FH</Typography>
           </ToggleButton>

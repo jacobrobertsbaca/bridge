@@ -64,7 +64,7 @@ function DealBlotterRow({ play, deals, setDeals, index }: DealBlotterProps & { i
       <TableCell>
         <Stack direction="row" alignItems="baseline" spacing={1}>
           <Typography variant="inherit" component="span" color="text.secondary">
-            #{index + 1}:{" "}
+            #{index + 1}{" "}
           </Typography>
           <Stack>
             <Typography variant="inherit" component="span" sx={hoverStyle(deal === hoverDeal)}>
