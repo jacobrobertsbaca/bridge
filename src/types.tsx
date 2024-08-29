@@ -1,5 +1,42 @@
-import { Typography, TypographyProps } from "@mui/material";
+import { Typography } from "@mui/material";
 import React from "react";
+
+import "katex/dist/katex.min.css";
+import { InlineMath } from "react-katex";
+
+class PointEquation {
+  private components: Map<number, number> = new Map();
+  private multiplier: number = 1;
+
+  add(points: number, quantity: number = 1): void {
+    if (!this.components.has(points)) this.components.set(points, 0);
+    this.components.set(points, this.components.get(points)! + quantity);
+  }
+
+  multiply(factor: number): void {
+    this.multiplier *= factor;
+  }
+
+  valueOf(): number {
+    let total = 0;
+    for (const [points, quantity] of this.components) {
+      total += points * quantity;
+    }
+    return this.multiplier * total;
+  }
+
+  toEquation(): React.ReactNode {
+    const multiplier = this.multiplier !== 1 ? `${this.multiplier}\\times ` : "";
+    const components = [...this.components.entries()].map(([points, quantity]) => `${quantity}\\times ${points}`);
+
+    if (components.length === 0) return null;
+    if (components.length === 1) return <InlineMath math={`${multiplier}${components[0]}=${this.valueOf()}`} />;
+
+    let equation = components.join("\\\\");
+    equation = `${multiplier}\\begin{pmatrix}${equation}\\end{pmatrix} = ${this.valueOf()}`;
+    return <InlineMath math={equation} />;
+  }
+}
 
 export enum Trump {
   Clubs = 1,
@@ -55,7 +92,7 @@ export enum Side {
   EastWest = "EW",
 }
 
-function otherSide(side: Side): Side {
+export function otherSide(side: Side): Side {
   return side === Side.NorthSouth ? Side.EastWest : Side.NorthSouth;
 }
 
@@ -102,11 +139,6 @@ export class Contract {
     return this.level + Contract.BOOK_COUNT;
   }
 
-  /** 1x for undoubled, 2x for doubled, 4x for redoubled */
-  doubleMultiplier(): number {
-    return 2 ** this.doubles;
-  }
-
   toSymbol(): React.ReactNode {
     return (
       <Typography variant="inherit" component="span">
@@ -127,6 +159,8 @@ export class Deal {
   tricks: number;
   /** The hand honors, if any, per side */
   honors: Partial<Record<Side, Honors>>;
+  /** Whether this deal is the last one */
+  isLast: boolean = false;
 
   constructor(declarer: Side, contract: Contract, tricks: number, honors: Partial<Record<Side, Honors>>) {
     console.assert(Number.isInteger(tricks), `The number of tricks must be an integer. Got ${tricks}`);
@@ -136,6 +170,11 @@ export class Deal {
     this.contract = contract;
     this.tricks = tricks;
     this.honors = honors;
+  }
+
+  /** Sets this deal as the last one. */
+  setLast(last?: boolean) {
+    this.isLast = last ?? true;
   }
 
   /** Did the declarer win this contract? */
@@ -229,6 +268,13 @@ const UNDERTRICK_POINTS: [UndertrickTable, UndertrickTable] = [
  */
 const RUBBER_POINTS: [number, number] = [500, 700];
 
+/**
+ * Bonus points awarded for an unfinished rubber.
+ * The first number is awarded to the only side that has one a game, if any.
+ * The second number is awarded to the only side with a part score, if any.
+ */
+const UNFINISHED_POINTS: [number, number] = [300, 100];
+
 /** Represents the state of play for a game of rubber bridge. */
 export class Play {
   completed: boolean;
@@ -268,6 +314,49 @@ export class Play {
       if (game.completed && game.winner() === side) return true;
     }
     return false;
+  }
+
+  /** The total score for a given side. */
+  sidePoints(side: Side): number {
+    return this.games.reduce((acc, game) => acc + game.sides[side].points(), 0);
+  }
+
+  /** The total below-the-line points for a given side. */
+  sideContractPoints(side: Side): number {
+    return this.games.reduce((acc, game) => acc + game.sides[side].contractPoints(), 0);
+  }
+
+  /**
+   * The total number of points earned by a deal.
+   * Positive for declarer earnings, negative for defender earnings.
+   */
+  dealPoints(deal: Deal): number {
+    const we = deal.declarer;
+    const they = otherSide(we);
+    return this.games.reduce((acc, game) => {
+      const wePts =
+        game.sides[we].above.filter((b) => b.deal === deal).reduce((acc, bonus) => acc + bonus.points, 0) +
+        game.sides[we].below.filter((b) => b.deal === deal).reduce((acc, bonus) => acc + bonus.points, 0);
+      const theyPts =
+        game.sides[they].above.filter((b) => b.deal === deal).reduce((acc, bonus) => acc + bonus.points, 0) +
+        game.sides[they].below.filter((b) => b.deal === deal).reduce((acc, bonus) => acc + bonus.points, 0);
+      return acc + wePts - theyPts;
+    }, 0);
+  }
+
+  /** Returns the number of game wins this side has. */
+  winCount(side: Side): number {
+    return this.games.filter((game) => game.winner() === side).length;
+  }
+
+  /** Returns the winning sides */
+  winners(): Side[] {
+    if (!this.completed) return [];
+    const ns = this.sidePoints(Side.NorthSouth);
+    const ew = this.sidePoints(Side.EastWest);
+    if (ns > ew) return [Side.NorthSouth];
+    if (ew > ns) return [Side.EastWest];
+    return [Side.NorthSouth, Side.EastWest];
   }
 }
 
@@ -309,16 +398,29 @@ export class Game {
   private scoreContract(deal: Deal): void {
     if (!deal.won()) return;
 
-    let points = 0;
-    for (let i = 0; i < deal.contract.level; i++) {
-      const selector = i === 0 ? 0 : 1;
-      points += CONTRACT_POINTS[deal.contract.trump][selector] * deal.contract.doubleMultiplier();
+    function compute(doubles: number): PointEquation {
+      const eqn = new PointEquation();
+      for (let i = 0; i < deal.contract.level; i++) {
+        const selector = i === 0 ? 0 : 1;
+        eqn.add(CONTRACT_POINTS[deal.contract.trump][selector]);
+      }
+
+      eqn.multiply(2 ** doubles);
+      return eqn;
     }
+
+    const points = compute(deal.contract.doubles);
 
     this.sides[deal.declarer].below.push({
       title: "Contract Points",
-      desc: `Points awarded for winning the contract.`,
-      points,
+      link: "https://en.wikipedia.org/wiki/Bridge_scoring#Contract_points",
+      desc: `Points awarded for bidding and making the contract`,
+      extra: points.toEquation(),
+      points: points.valueOf(),
+      insight: {
+        base: compute(0).valueOf(),
+        doubleBonus: true,
+      },
       deal,
     });
   }
@@ -327,29 +429,53 @@ export class Game {
     const overtricks = deal.tricks - deal.contract.rawTricks();
     if (overtricks <= 0) return;
 
-    let points = overtricks * OVERTRICK_POINTS[deal.contract.trump][deal.contract.doubles];
+    function compute(isVulnerable: boolean, doubles: number): PointEquation {
+      const eqn = new PointEquation();
 
-    /* If contract doubled and declarer vulnerable, they get double the points */
-    if (deal.contract.doubles && this.play.isVulnerable(deal.declarer)) points *= 2;
+      /* If contract doubled and declarer vulnerable, they get double the points */
+      const multiplier = doubles && isVulnerable ? 2 : 1;
+      eqn.add(multiplier * OVERTRICK_POINTS[deal.contract.trump][doubles], overtricks);
+
+      return eqn;
+    }
+
+    const isVulnerable = this.play.isVulnerable(deal.declarer);
+    const points = compute(isVulnerable, deal.contract.doubles);
 
     this.sides[deal.declarer].above.push({
       title: "Overtrick Bonus",
+      link: "https://en.wikipedia.org/wiki/Bridge_scoring#Overtrick_points",
       desc: "Points awarded for overtricks",
-      points,
+      extra: points.toEquation(),
+      points: points.valueOf(),
+      insight: {
+        base: compute(false, 0).valueOf(),
+        isVulnerable,
+        vulnerableBonus: true,
+        doubleBonus: true,
+      },
       deal,
     });
   }
 
   private scoreSlamBonus(deal: Deal): void {
     if (!deal.won()) return;
-    const vulnerableIdx = this.play.isVulnerable(deal.declarer) ? 1 : 0;
+
+    const isVulnerable = this.play.isVulnerable(deal.declarer);
+    const vulnerableIdx = isVulnerable ? 1 : 0;
 
     if (deal.contract.level === 6) {
       // Small slam
       this.sides[deal.declarer].above.push({
         title: "Small Slam",
+        link: "https://en.wikipedia.org/wiki/Bridge_scoring#Slam_bonus",
         desc: "Points awarded for winning a small slam",
         points: SLAM_BONUS[0][vulnerableIdx],
+        insight: {
+          base: SLAM_BONUS[0][0],
+          isVulnerable,
+          vulnerableBonus: true,
+        },
         deal,
       });
     }
@@ -358,8 +484,14 @@ export class Game {
       // Grand slam
       this.sides[deal.declarer].above.push({
         title: "Grand Slam",
+        link: "https://en.wikipedia.org/wiki/Bridge_scoring#Slam_bonus",
         desc: "Points awarded for winning a grand slam",
         points: SLAM_BONUS[1][vulnerableIdx],
+        insight: {
+          base: SLAM_BONUS[1][0],
+          isVulnerable,
+          vulnerableBonus: true,
+        },
         deal,
       });
     }
@@ -371,6 +503,7 @@ export class Game {
 
     this.sides[deal.declarer].above.push({
       title: "Insult Bonus",
+      link: "https://en.wikipedia.org/wiki/Bridge_scoring#Doubled_or_redoubled_bonus",
       desc: `Points awarded for winning a ${deal.contract.doubles === 1 ? "doubled" : "redoubled"} contract`,
       points: INSULT_POINTS[deal.contract.doubles - 1],
       deal,
@@ -379,19 +512,34 @@ export class Game {
 
   private scoreUndertricks(deal: Deal): void {
     if (deal.won()) return;
-    const vulnerableIdx = this.play.isVulnerable(deal.declarer) ? 1 : 0;
-    const undertricks = deal.contract.rawTricks() - deal.tricks;
 
-    let points = 0;
-    for (let i = 0; i < undertricks; i++) {
-      const selector = i === 0 ? 0 : i >= 3 ? 2 : 1;
-      points += UNDERTRICK_POINTS[vulnerableIdx][selector][deal.contract.doubles];
+    function compute(isVulnerable: boolean, doubles: number): PointEquation {
+      const eqn = new PointEquation();
+      const vulnerableIdx = isVulnerable ? 1 : 0;
+      const undertricks = deal.contract.rawTricks() - deal.tricks;
+
+      for (let i = 0; i < undertricks; i++) {
+        const selector = i === 0 ? 0 : i >= 3 ? 2 : 1;
+        eqn.add(UNDERTRICK_POINTS[vulnerableIdx][selector][doubles]);
+      }
+      return eqn;
     }
+
+    const isVulnerable = this.play.isVulnerable(deal.declarer);
+    const points = compute(isVulnerable, deal.contract.doubles);
 
     this.sides[otherSide(deal.declarer)].above.push({
       title: "Penalty Bonus",
+      link: "https://en.wikipedia.org/wiki/Bridge_scoring#Penalty_points",
       desc: `Points awarded for undertricks`,
-      points,
+      extra: points.toEquation(),
+      points: points.valueOf(),
+      insight: {
+        base: compute(false, 0).valueOf(),
+        isVulnerable,
+        vulnerableBonus: true,
+        doubleBonus: true,
+      },
       deal,
     });
   }
@@ -410,6 +558,7 @@ export class Game {
       if (deal.honors[side]) {
         this.sides[side].above.push({
           title: "Honor Bonus",
+          link: "https://en.wikipedia.org/wiki/Bridge_scoring#Honor_bonus_or_honors",
           desc: `Points awarded for holding ${
             deal.honors[side] === Honors.Partial ? "four of the five" : "all five"
           } honors`,
@@ -421,17 +570,60 @@ export class Game {
   }
 
   private scoreRubberBonus(deal: Deal): void {
-    const wins = this.play.games.filter((game) => game.winner() === deal.declarer).length;
-    if (wins < 2) return;
-    const vulnerableIdx = this.play.isVulnerable(otherSide(deal.declarer)) ? 0 : 1;
-    this.sides[deal.declarer].above.push({
-      title: "Rubber Bonus",
-      desc: `Points awarded for a ${vulnerableIdx === 0 ? "slow" : "fast"} rubber`,
-      points: RUBBER_POINTS[vulnerableIdx],
-      deal,
-    });
+    const we = deal.declarer;
+    const they = otherSide(we);
 
-    this.play.completed = true;
+    const ourWins = this.play.winCount(we);
+    const theirWins = this.play.winCount(they);
+
+    if (ourWins >= 2) {
+      const vulnerableIdx = theirWins > 0 ? 0 : 1;
+      this.sides[deal.declarer].above.push({
+        title: "Rubber Bonus",
+        link: "https://en.wikipedia.org/wiki/Bridge_scoring#Rubber_bonus",
+        desc: `Points awarded for winning a ${vulnerableIdx === 0 ? "slow" : "fast"} rubber`,
+        points: RUBBER_POINTS[vulnerableIdx],
+        deal,
+      });
+      this.play.completed = true;
+    } else if (deal.isLast) {
+      // Check for unique game win
+      // Get the side who has won the only game, if any
+
+      let uniqueWinner: Side | undefined;
+      if (ourWins === 1 && theirWins === 0) uniqueWinner = we;
+      if (theirWins === 1 && ourWins === 0) uniqueWinner = they;
+
+      if (uniqueWinner) {
+        this.sides[uniqueWinner].above.push({
+          title: "Unfinished Rubber",
+          link: "https://en.wikipedia.org/wiki/Bridge_scoring#Rubber_bonus",
+          desc: `Points awarded for having won the only game in an unfinished rubber`,
+          points: UNFINISHED_POINTS[0],
+          deal,
+        });
+      } else {
+        // Check for unique part score
+        const ourPts = this.play.sideContractPoints(we);
+        const theirPts = this.play.sideContractPoints(they);
+
+        let uniquePartScore: Side | undefined;
+        if (ourPts > 0 && theirPts === 0) uniquePartScore = we;
+        if (theirPts > 0 && ourPts === 0) uniquePartScore = they;
+
+        if (uniquePartScore) {
+          this.sides[uniquePartScore].above.push({
+            title: "Unfinished Rubber",
+            link: "https://en.wikipedia.org/wiki/Bridge_scoring#Rubber_bonus",
+            desc: `Points awarded for having the only part score in an unfinished rubber`,
+            points: UNFINISHED_POINTS[1],
+            deal,
+          });
+        }
+      }
+
+      this.play.completed = true;
+    }
   }
 }
 
@@ -450,15 +642,35 @@ export class GameSide {
     return this.above.reduce((acc, bonus) => acc + bonus.points, 0);
   }
 
+  points() {
+    return this.contractPoints() + this.bonusPoints();
+  }
+
   constructor() {
     this.above = [];
     this.below = [];
   }
 }
 
+/** Optional insight into the bonuses applied when calculating score. */
+export type PointInsight = {
+  /** Base points to be gotten without any bonuses */
+  base: number;
+  /** Was the declarer actually vulnerable? */
+  isVulnerable?: boolean;
+  /** Does the declarer being vulnerable award a point increase? */
+  vulnerableBonus?: boolean;
+  /** Does the contract being doubled awarded a point increase? */
+  doubleBonus?: boolean;
+};
+
 export type Bonus = {
-  title: React.ReactNode;
+  title: string;
+  /** A link to the rules describing this bonus */
+  link?: string;
   desc: React.ReactNode;
+  extra?: React.ReactNode;
   points: number;
+  insight?: PointInsight;
   deal: Deal;
 };

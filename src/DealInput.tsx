@@ -6,21 +6,26 @@ import {
   SxProps,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
   TypographyProps,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { Formik, FormikProps, useFormikContext } from "formik";
 import { z } from "zod";
 import { toFormikValidationSchema } from "zod-formik-adapter";
-import { Contract, Deal, Honors, Side } from "./types";
+import { Contract, Deal, Honors, otherSide, Side, Trump } from "./types";
 import FormikTextField from "./FormikTextField";
 import PlusIcon from "@heroicons/react/24/solid/PlusCircleIcon";
+import StopIcon from "@heroicons/react/24/solid/StopCircleIcon";
 
 const formSchema = z.object({
   declarer: z.nativeEnum(Side),
   contract: z.string().refine((v) => !!Contract.parse(v), { message: "Invalid contract" }),
   tricks: z.number(),
   honors: z.record(z.nativeEnum(Side), z.nativeEnum(Honors)),
+  isLast: z.boolean(),
 });
 
 type Form = z.infer<typeof formSchema>;
@@ -33,7 +38,9 @@ const buttonSchema: SxProps = {
 function getDeal(values: FormikProps<Form>["values"]): Deal | undefined {
   const contract = Contract.parse(values.contract);
   if (!contract) return undefined;
-  return new Deal(values.declarer, contract, values.tricks, values.honors);
+  const deal = new Deal(values.declarer, contract, values.tricks, values.honors);
+  deal.setLast(values.isLast);
+  return deal;
 }
 
 function Caption({ children, ...rest }: TypographyProps) {
@@ -44,7 +51,7 @@ function Caption({ children, ...rest }: TypographyProps) {
   );
 }
 
-function TrickSelector({ from, to, disabled }: { from: number; to: number, disabled?: boolean }) {
+function TrickSelector({ from, to, disabled }: { from: number; to: number; disabled?: boolean }) {
   const formik = useFormikContext<Form>();
   return (
     <ToggleButtonGroup
@@ -62,7 +69,7 @@ function TrickSelector({ from, to, disabled }: { from: number; to: number, disab
   );
 }
 
-function HonorsSelector({ side, disabled }: { side: Side, disabled?: boolean }) {
+function HonorsSelector({ side, disabled }: { side: Side; disabled?: boolean }) {
   const formik = useFormikContext<Form>();
   return (
     <Stack>
@@ -70,15 +77,26 @@ function HonorsSelector({ side, disabled }: { side: Side, disabled?: boolean }) 
         exclusive
         value={formik.values.honors[side]}
         orientation="vertical"
-        onChange={(_, v) => formik.setFieldValue(`honors.${side}`, v ?? undefined)}
+        onChange={(_, v) => {
+          formik.setFieldValue(`honors.${side}`, v ?? undefined);
+          if (v) formik.setFieldValue(`honors.${otherSide(side)}`, undefined);
+        }}
         disabled={disabled}
       >
-        <ToggleButton value={Honors.Partial} sx={buttonSchema}>
-          <Typography variant="caption">H</Typography>
-        </ToggleButton>
-        <ToggleButton value={Honors.Full} sx={buttonSchema}>
-          <Typography variant="caption">FH</Typography>
-        </ToggleButton>
+        <Tooltip title={"Hold 4/5 of A/K/Q/J/10 of trumps."} placement="top" arrow>
+          <ToggleButton
+            value={Honors.Partial}
+            sx={buttonSchema}
+            disabled={Contract.parse(formik.values.contract)?.trump === Trump.NoTrump}
+          >
+            <Typography variant="caption">H</Typography>
+          </ToggleButton>
+        </Tooltip>
+        <Tooltip title={"Hold all A/K/Q/J/10 of trumps, or all four aces if NT."} placement="bottom" arrow>
+          <ToggleButton value={Honors.Full} sx={buttonSchema}>
+            <Typography variant="caption">FH</Typography>
+          </ToggleButton>
+        </Tooltip>
       </ToggleButtonGroup>
       <Caption textAlign="center">{side}</Caption>
     </Stack>
@@ -87,41 +105,83 @@ function HonorsSelector({ side, disabled }: { side: Side, disabled?: boolean }) 
 
 function DealInputForm({ disabled }: DealInputProps) {
   const formik = useFormikContext<Form>();
-  console.log(formik.errors)
-  return (
-    <Stack direction="row" alignItems="start" spacing={1}>
-      <FormikTextField select name="declarer" label="Declarer" helperText={undefined} sx={{ width: 120 }} disabled={disabled}>
-        {Object.values(Side).map((side) => (
-          <MenuItem key={side} value={side}>
-            {side}
-          </MenuItem>
-        ))}
-      </FormikTextField>
-      <FormikTextField
-        label="Contract"
-        name="contract"
-        sx={{ width: 80 }}
-        helperText={Contract.parse(formik.values.contract)?.toSymbol()}
-        onChange={(evt) => {
-          if (Contract.MASK.test(evt.target.value)) formik.setFieldValue("contract", evt.target.value);
-        }}
-        disabled={disabled}
-      />
+  const theme = useTheme();
+  const xs = !useMediaQuery(theme.breakpoints.up("sm"));
 
-      <Stack>
-        <TrickSelector from={0} to={6} disabled={disabled} />
-        <TrickSelector from={7} to={13} disabled={disabled} />
-        <Caption>Tricks Won</Caption>
+  return (
+    <Stack direction={{ xs: "column", sm: "row" }} alignItems="start" spacing={1}>
+      <Stack direction="row" alignItems="start" spacing={1} sx={xs ? { width: 1 } : {}}>
+        <FormikTextField
+          select
+          name="declarer"
+          label="Declarer"
+          helperText={undefined}
+          fullWidth={xs}
+          sx={{ width: xs ? undefined : 80 }}
+          disabled={disabled}
+        >
+          {Object.values(Side).map((side) => (
+            <MenuItem key={side} value={side}>
+              {side}
+            </MenuItem>
+          ))}
+        </FormikTextField>
+
+        <FormikTextField
+          label="Contract"
+          name="contract"
+          fullWidth={xs}
+          sx={{ width: xs ? undefined : 120 }}
+          helperText={Contract.parse(formik.values.contract)?.toSymbol()}
+          onChange={(evt) => {
+            if (Contract.MASK.test(evt.target.value)) formik.setFieldValue("contract", evt.target.value);
+          }}
+          disabled={disabled}
+          placeholder="1sxx"
+          autoComplete="off"
+        />
       </Stack>
 
-      <HonorsSelector side={Side.NorthSouth} disabled={disabled} />
-      <HonorsSelector side={Side.EastWest} disabled={disabled} />
+      <Stack direction="row" alignItems="start" spacing={1}>
+        <Stack>
+          <TrickSelector from={0} to={6} disabled={disabled} />
+          <TrickSelector from={7} to={13} disabled={disabled} />
+          <Caption>Tricks Won</Caption>
+        </Stack>
 
-      <IconButton aria-label="add" disabled={disabled || !formik.isValid} onClick={formik.submitForm}>
-        <SvgIcon>
-          <PlusIcon />
-        </SvgIcon>
-      </IconButton>
+        <HonorsSelector side={Side.NorthSouth} disabled={disabled} />
+        <HonorsSelector side={Side.EastWest} disabled={disabled} />
+      </Stack>
+
+      <Stack direction="row" spacing={-1}>
+        <Tooltip title="Enter a deal" arrow placement="top">
+          <IconButton
+            aria-label="add"
+            disabled={disabled || !formik.isValid}
+            onClick={formik.submitForm}
+            color="primary"
+          >
+            <SvgIcon>
+              <PlusIcon />
+            </SvgIcon>
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title="Enter the final deal" arrow placement="top">
+          <IconButton
+            aria-label="stop"
+            disabled={disabled || !formik.isValid}
+            onClick={() => {
+              formik.setFieldValue("isLast", true);
+              formik.submitForm();
+            }}
+          >
+            <SvgIcon>
+              <StopIcon />
+            </SvgIcon>
+          </IconButton>
+        </Tooltip>
+      </Stack>
     </Stack>
   );
 }
@@ -139,11 +199,12 @@ export default function DealInput(props: DealInputProps) {
         contract: "",
         tricks: undefined as any,
         honors: {},
+        isLast: false,
       }}
       validationSchema={toFormikValidationSchema(formSchema)}
-      onSubmit={(values, { resetForm }) => {
+      onSubmit={(values, { setFieldValue }) => {
         props.onDeal(getDeal(values)!);
-        resetForm();
+        setFieldValue("isLast", false);
       }}
     >
       <DealInputForm {...props} />
