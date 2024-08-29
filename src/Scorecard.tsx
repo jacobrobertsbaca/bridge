@@ -176,15 +176,18 @@ function BonusPoints({ play }: ScorecardProps) {
 
   return (
     <>
-      <BodySpace sx={rows.length === 0 ? bottomStyle : {}} />
-      <TableBody sx={rows.length === 0 ? {} : bottomStyle}>
-        {rows.reverse().map((idx) => (
-          <TableRow key={idx}>
-            <BonusCell side={Side.NorthSouth} bonuses={ns} index={idx} />
-            <BonusCell side={Side.EastWest} bonuses={ew} index={idx} />
-          </TableRow>
-        ))}
-      </TableBody>
+      {rows.length > 0 ? (
+        <TableBody sx={bottomStyle}>
+          {rows.reverse().map((idx) => (
+            <TableRow key={idx}>
+              <BonusCell side={Side.NorthSouth} bonuses={ns} index={idx} />
+              <BonusCell side={Side.EastWest} bonuses={ew} index={idx} />
+            </TableRow>
+          ))}
+        </TableBody>
+      ) : (
+        <BodySpace sx={bottomStyle} />
+      )}
     </>
   );
 }
