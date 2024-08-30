@@ -49,20 +49,22 @@ function BodySpace(props: TableBodyProps) {
 }
 
 function SideHeader({ play, side }: { play: Play; side: Side }) {
+  const winner = play.winners().includes(side);
   return (
     <SCCell sx={side === Side.NorthSouth ? leftStyle : {}}>
-      {side}
       {!play.completed && play.isVulnerable(side) && (
         <Tooltip title="Vulnerable" placement="top" arrow>
           <Typography variant="inherit" component="span">
             🏴‍☠️
           </Typography>
         </Tooltip>
-      )}{play.winners().includes(side) && (
+      )}
+      {winner && (
         <Typography variant="inherit" component="span">
-          🤴
+          👑
         </Typography>
       )}{" "}
+      {side}{" "}
       <Typography variant="caption" component="span" color="text.secondary">
         {play.sidePoints(side)}
       </Typography>
@@ -141,12 +143,12 @@ function BonusItem({ bonus, side, winner }: BonusItemProps) {
         onMouseEnter={() => setHoverDeal(bonus.deal)}
         onMouseLeave={() => setHoverDeal(undefined)}
       >
-        {bonus.points}{" "}
         {winner && (
           <Typography variant="inherit" component="span">
             👑
           </Typography>
-        )}
+        )}&nbsp;&nbsp;
+        {bonus.points}
       </Typography>
     </LightTooltip>
   );
